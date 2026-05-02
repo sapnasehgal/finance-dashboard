@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+/* Design tokens — these align with the Setup Summary's colour coding.
+   Business = blue, Personal = green, Foreign/Wise = purple, Flagged = amber. */
+@theme {
+  --color-business: #2563eb;
+  --color-business-bg: #dbeafe;
+  --color-personal: #16a34a;
+  --color-personal-bg: #dcfce7;
+  --color-foreign: #9333ea;
+  --color-foreign-bg: #f3e8ff;
+  --color-flagged: #d97706;
+  --color-flagged-bg: #fef3c7;
+
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: #f8fafc;
+  color: #0f172a;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "tnum" 1; /* tabular figures so numbers line up */
+}
