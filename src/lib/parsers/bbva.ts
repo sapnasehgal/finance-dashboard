@@ -33,95 +33,215 @@ type Categorisation = {
   needsReview: boolean;
 };
 
-// Session-2 categorisation: covers the rules we know now.
-// The full rules engine (Session 3+) will expand this.
 function categorise(concepto: string, movimiento: string, amount: number): Categorisation {
   const c = concepto.toLowerCase();
   const m = movimiento.toLowerCase();
 
-  // ── Internal BBVA transfers (savings buckets) ──────────────────────────────
-  if (
-    (c === 'traspaso desde cuenta' || c === 'traspaso a cuenta') &&
-    m.includes('sapna')
-  ) {
+  // ── Internal BBVA transfers (savings buckets) ─────────────────────────────
+  if (c === 'traspaso desde cuenta' || c === 'traspaso a cuenta') {
     return { category: 'Internal Transfer', kind: 'internal_transfer', needsReview: false };
   }
 
-  // ── Wise → BBVA inflows (income already captured on Wise side) ────────────
-  if (c === 'transferencia recibida' && m.includes('sapna')) {
+  // ── Wise → BBVA inflows (income already captured on Wise side) ───────────
+  if ((c === 'transferencia recibida' || c.includes('transferencia')) && m.includes('sapna')) {
     return { category: 'Internal Transfer (Wise→BBVA)', kind: 'internal_transfer', needsReview: false };
   }
 
-  // ── Personal loan repayment ───────────────────────────────────────────────
-  // Monthly until May 2027; Concepto = "Cargo por amortizacion de prestamo/credito"
+  // ── Personal loan repayment (~€403.61/mo until May 2027) ─────────────────
   if (c.includes('amortizacion') || (c.includes('prestamo') && c.includes('cargo'))) {
     return { category: 'Loan Repayment', kind: 'expense', needsReview: false };
   }
 
-  // ── Card payments (Movimiento = "Pago con tarjeta") ───────────────────────
-  // Concepto holds the merchant name in this case
+  // ── Tax / compliance (checked before generic patterns) ───────────────────
+  if (c.includes('tgss') || c.includes('seguridad social') || c.includes('tesoreria general')) {
+    return { category: 'Autónoma Tax (TGSS)', kind: 'expense', needsReview: false };
+  }
+  if (c.includes('hacienda') || c.includes('irpf') || c.includes('agencia tributaria') || c.includes('aeat')) {
+    return { category: 'IRPF Aplazamiento', kind: 'expense', needsReview: false };
+  }
+
+  // ── Gestor ────────────────────────────────────────────────────────────────
+  if (c.includes('igsa') || (c.includes('associats') && c.includes('tax'))) {
+    return { category: 'Gestor / Accounting', kind: 'expense', needsReview: false };
+  }
+
+  // ── Rent (GEIBA 2005 SL) ─────────────────────────────────────────────────
+  if (c.includes('geiba')) {
+    return { category: 'Rent', kind: 'expense', needsReview: false };
+  }
+
+  // ── Utilities ─────────────────────────────────────────────────────────────
+  if (c.includes('energia xxi') || c.includes('endesa') || c.includes('iberdrola') || c.includes('naturgy') || c.includes('holaluz')) {
+    return { category: 'Utilities (Electricity)', kind: 'expense', needsReview: false };
+  }
+  if (c.includes('aigues') || c.includes('aguas') || c.includes('water')) {
+    return { category: 'Utilities', kind: 'expense', needsReview: false };
+  }
+
+  // ── Insurance ─────────────────────────────────────────────────────────────
+  if (c.includes('mapfre')) {
+    return { category: 'Insurance - Health (Mapfre)', kind: 'expense', needsReview: false };
+  }
+  if (c.includes('generali')) {
+    return { category: 'Insurance - Home (Generali)', kind: 'expense', needsReview: false };
+  }
+
+  // ── Vodafone (50% business, 50% personal) ─────────────────────────────────
+  if (c.includes('vodafone')) {
+    return { category: 'Vodafone (50% Business)', kind: 'expense', needsReview: false };
+  }
+
+  // ── Card payments — Concepto holds the merchant name ─────────────────────
   if (m === 'pago con tarjeta') {
-    if (c.includes('taxi') || c.includes('cabify') || c.includes('free now') || c.includes('mytaxi') || c.includes('prestige')) {
+    // Taxis — all default to business (user corrects personal ones)
+    if (c.includes('taxi') || c.includes('cabify') || c.includes('free now') || c.includes('mytaxi') || c.includes('prestige') || c.includes('limousine')) {
       return { category: 'Taxi (Business)', kind: 'expense', needsReview: false };
     }
-    if (c.includes('ametller') || c.includes('condis') || c.includes('caprabo') || c.includes('carrefour') || c.includes('mercadona') || c.includes('supermercado') || c.includes('lidl') || c.includes('alcampo')) {
+
+    // Grocery supermarkets
+    if (c.includes('ametller') || c.includes('condis') || c.includes('caprabo') || c.includes('carrefour') || c.includes('mercadona') || c.includes('supermercado') || c.includes('lidl') || c.includes('alcampo') || c.includes('dia ') || c.includes('spar')) {
       return { category: 'Groceries', kind: 'expense', needsReview: false };
     }
+
+    // Delivery — >€40 = groceries, ≤€40 = dining out
     if (c.includes('uber eats') || c.includes('glovo') || c.includes('deliveroo')) {
-      // Uber Eats >€40 = groceries, ≤€40 = dining out
       return Math.abs(amount) > 40
         ? { category: 'Groceries', kind: 'expense', needsReview: false }
         : { category: 'Dining Out', kind: 'expense', needsReview: false };
     }
-    if (c.includes('farmacia') || c.includes('pharmacy')) {
+
+    // Dining
+    if (c.includes('restauran') || c.includes('cafeteria') || c.includes('bar ') || c.includes('cafe ') || c.includes('café')) {
+      return { category: 'Dining Out', kind: 'expense', needsReview: false };
+    }
+
+    // Pharmacy
+    if (c.includes('farmacia') || c.includes('pharmacy') || c.includes('parafarmacia')) {
       return { category: 'Medical & Pharmacy', kind: 'expense', needsReview: false };
     }
+
+    // Dental
+    if (c.includes('dentalspa') || c.includes('dental') || c.includes('clinica dental')) {
+      return { category: 'Medical & Pharmacy', kind: 'expense', needsReview: false };
+    }
+
+    // ATM via card
     if (c.includes('atm') || c.includes('cajero')) {
       const flag = Math.abs(amount) === 300;
-      return {
-        category: flag ? 'Cash (Likely Personal Trainer)' : 'Cash (Uncategorised)',
-        kind: 'expense',
-        needsReview: flag,
-      };
+      return { category: flag ? 'Cash (Likely Personal Trainer)' : 'Cash (Uncategorised)', kind: 'expense', needsReview: flag };
     }
+
+    // Software & business subscriptions
+    if (c.includes('anthropic') || c.includes('claude.ai') || c.includes('claude pro')) {
+      return { category: 'Software & Subscriptions', kind: 'expense', needsReview: false };
+    }
+    if (c.includes('openai') || c.includes('chatgpt')) {
+      return { category: 'Software & Subscriptions', kind: 'expense', needsReview: false };
+    }
+    if (c.includes('zoom')) {
+      return { category: 'Software & Subscriptions', kind: 'expense', needsReview: false };
+    }
+    if (c.includes('flodesk') || c.includes('teachable') || c.includes('convertkit') || c.includes('kit.com')) {
+      return { category: 'Software & Subscriptions', kind: 'expense', needsReview: false };
+    }
+    if (c.includes('canva') || c.includes('adobe') || c.includes('calendly') || c.includes('napkin') || c.includes('samcart') || c.includes('ampmycontent')) {
+      return { category: 'Software & Subscriptions', kind: 'expense', needsReview: false };
+    }
+    // Google — flag for review (Workspace=business vs Google One=personal)
+    if (c.includes('google') && !c.includes('google ads')) {
+      return { category: 'Software & Subscriptions', kind: 'expense', needsReview: true };
+    }
+    if (c.includes('google ads') || c.includes('google*ads')) {
+      return { category: 'Advertising', kind: 'expense', needsReview: false };
+    }
+
+    // Public transport
+    if (c.includes('t-mobilitat') || c.includes('tmb') || c.includes('mobilitat') || c.includes('metro barcelona')) {
+      return { category: 'Transport - Public', kind: 'expense', needsReview: false };
+    }
+    if (c.includes('renfe') || c.includes('rodalies')) {
+      return { category: 'Transport - Public', kind: 'expense', needsReview: false };
+    }
+
+    // Travel
+    if (c.includes('hotel') || c.includes('airbnb') || c.includes('booking.com') || c.includes('ryanair') || c.includes('vueling') || c.includes('iberia')) {
+      return { category: 'Travel & Holidays', kind: 'expense', needsReview: true };
+    }
+
+    // Gym / fitness
+    if (c.includes('urban sports') || c.includes('urbansports') || c.includes('gym') || c.includes('fitness')) {
+      return { category: 'Gym & Fitness', kind: 'expense', needsReview: false };
+    }
+
+    // Metropolitan Business Association
+    if (c.includes('metropolitan')) {
+      return { category: 'Metropolitan Business Assoc.', kind: 'expense', needsReview: false };
+    }
+
+    // Printing / office
+    if (c.includes('workcenter')) {
+      return { category: 'Printing & Office', kind: 'expense', needsReview: false };
+    }
+
+    // Pet (Brielle) — dog food, vet, daycare
+    if (c.includes('veterinar') || c.includes('dogsy') || c.includes('woof') || c.includes('petco') || c.includes('arcaplanet') || c.includes('tienda animal') || c.includes('mascota')) {
+      return { category: 'Pet (Brielle)', kind: 'expense', needsReview: false };
+    }
+
+    // Personal care
+    if (c.includes('massage') || c.includes('masaje') || c.includes('physio') || c.includes('fisio') || c.includes('nails') || c.includes('uñas') || c.includes('estetica') || c.includes('salud')) {
+      return { category: 'Personal Care', kind: 'expense', needsReview: false };
+    }
+
+    // Amazon — professional development by default (flag for review)
+    if (c.includes('amazon') && !c.includes('amazon prime')) {
+      return { category: 'Professional Development', kind: 'expense', needsReview: true };
+    }
+
+    // Entertainment subs via card
+    if (c.includes('netflix') || c.includes('spotify') || c.includes('amazon prime') || c.includes('hbo') || c.includes('disney+') || c.includes('apple tv')) {
+      return { category: 'Entertainment Subscriptions', kind: 'expense', needsReview: false };
+    }
+
     return { category: 'Uncategorised', kind: 'expense', needsReview: true };
   }
 
-  // ── ATM withdrawals (shown differently from card payments) ────────────────
+  // ── ATM withdrawals ───────────────────────────────────────────────────────
   if (c.includes('cajero') || c.includes('reintegro') || m.includes('cajero')) {
     const flag = Math.abs(amount) === 300;
-    return {
-      category: flag ? 'Cash (Likely Personal Trainer)' : 'Cash (Uncategorised)',
-      kind: 'expense',
-      needsReview: flag,
-    };
+    return { category: flag ? 'Cash (Likely Personal Trainer)' : 'Cash (Uncategorised)', kind: 'expense', needsReview: flag };
   }
 
   // ── Income (positive amounts not already caught above) ────────────────────
   if (amount > 0) {
-    // €85 storage rental arrives via Bizum from a recurring sender
+    // €85 recurring Bizum → storage rental
     if (Math.abs(amount - 85) < 0.01) {
       return { category: 'Rental Income (Storage €85)', kind: 'income', needsReview: false };
     }
-    if (c.includes('bizum') || c.includes('ingreso por bizum')) {
+    if (c.includes('bizum') || c.includes('ingreso por bizum') || m.includes('bizum')) {
       return { category: 'Tutoring Income', kind: 'income', needsReview: false };
     }
     if (c === 'transferencia recibida') {
-      // Not from Sapna (caught above) → income from client
       return { category: 'Tutoring Income', kind: 'income', needsReview: true };
     }
     return { category: 'Uncategorised Income', kind: 'income', needsReview: true };
   }
 
-  // ── Subscriptions / direct debits (negative, known patterns) ─────────────
-  if (c.includes('vodafone')) {
-    return { category: 'Vodafone (50% Business)', kind: 'expense', needsReview: false };
-  }
-  if (c.includes('netflix') || c.includes('spotify') || c.includes('amazon prime')) {
+  // ── Direct debits / subscriptions (negative, non-card) ───────────────────
+  if (c.includes('netflix') || c.includes('spotify') || c.includes('amazon prime') || c.includes('hbo') || c.includes('disney')) {
     return { category: 'Entertainment Subscriptions', kind: 'expense', needsReview: false };
   }
   if (c.includes('urban sports') || c.includes('urbansports')) {
     return { category: 'Gym & Fitness', kind: 'expense', needsReview: false };
+  }
+  if (c.includes('t-mobilitat') || c.includes('mobilitat')) {
+    return { category: 'Transport - Public', kind: 'expense', needsReview: false };
+  }
+  if (c.includes('metropolitan')) {
+    return { category: 'Metropolitan Business Assoc.', kind: 'expense', needsReview: false };
+  }
+  if (c.includes('anthropic') || c.includes('openai') || c.includes('zoom') || c.includes('flodesk') || c.includes('teachable') || c.includes('canva') || c.includes('adobe') || c.includes('calendly')) {
+    return { category: 'Software & Subscriptions', kind: 'expense', needsReview: false };
   }
 
   return { category: 'Uncategorised', kind: 'expense', needsReview: true };
