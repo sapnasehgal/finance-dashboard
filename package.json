@@ -11,12 +11,15 @@
     "deploy": "npm run build && firebase deploy"
   },
   "dependencies": {
+    "@types/papaparse": "^5.5.2",
     "firebase": "^11.5.0",
     "lucide-react": "^0.468.0",
+    "papaparse": "^5.5.3",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-router-dom": "^7.1.1",
-    "recharts": "^2.15.0"
+    "recharts": "^2.15.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -1,23 +1,261 @@
-/**
- * Transactions ledger. Will support search, filter, sort, click-to-edit,
- * and the "create rule from this transaction" flow. Lands in Session 5.
- */
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowUpDown, Upload } from 'lucide-react';
+import { getTransactions } from '../lib/firestore';
+import { db } from '../lib/firebase';
+import { useAuth } from '../contexts/AuthContext';
+import type { Transaction } from '../lib/types';
 
-import PlaceholderCard from "../components/PlaceholderCard";
+type SortKey = 'date' | 'amount' | 'account' | 'category';
+type SortDir = 'asc' | 'desc';
+
+function fmtDate(iso: string) {
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+function fmtAmount(tx: Transaction): string {
+  const abs = Math.abs(tx.amount).toFixed(2);
+  if (tx.originalCurrency && tx.originalCurrency !== 'EUR') {
+    const origAbs = Math.abs(tx.originalAmount ?? tx.amount).toFixed(2);
+    return `${tx.amount >= 0 ? '+' : '-'}${abs} EUR\n(${origAbs} ${tx.originalCurrency})`;
+  }
+  return `${tx.amount >= 0 ? '+' : '-'}${abs}`;
+}
+
+function accountDot(account: string) {
+  const colours: Record<string, string> = {
+    BBVA:   'bg-blue-500',
+    Wise:   'bg-purple-500',
+    AMEX:   'bg-slate-500',
+    Iberia: 'bg-rose-500',
+  };
+  return (
+    <span className="flex items-center gap-1.5">
+      <span className={`inline-block h-2 w-2 rounded-full ${colours[account] ?? 'bg-slate-400'}`} />
+      {account}
+    </span>
+  );
+}
+
+function SortButton({
+  label,
+  sortKey,
+  current,
+  dir,
+  onClick,
+}: {
+  label: string;
+  sortKey: SortKey;
+  current: SortKey;
+  dir: SortDir;
+  onClick: (k: SortKey) => void;
+}) {
+  const active = current === sortKey;
+  return (
+    <button
+      onClick={() => onClick(sortKey)}
+      className={`flex items-center gap-1 text-left font-medium whitespace-nowrap
+        ${active ? 'text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
+    >
+      {label}
+      <ArrowUpDown className={`h-3 w-3 ${active ? 'opacity-100' : 'opacity-30'}`} />
+      {active && <span className="text-xs">{dir === 'desc' ? '↓' : '↑'}</span>}
+    </button>
+  );
+}
 
 export default function Transactions() {
-  return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-semibold tracking-tight">Transactions</h2>
-        <p className="text-sm text-slate-600 mt-1">
-          Every transaction across all four accounts.
-        </p>
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [loading, setLoading]           = useState(true);
+  const [sortKey, setSortKey]           = useState<SortKey>('date');
+  const [sortDir, setSortDir]           = useState<SortDir>('desc');
+  const [filter, setFilter]             = useState<'all' | 'income' | 'expense' | 'internal' | 'review'>('all');
+
+  useEffect(() => {
+    if (!db || !user) { setLoading(false); return; }
+    getTransactions(db, user.uid, 500)
+      .then(setTransactions)
+      .finally(() => setLoading(false));
+  }, [user]);
+
+  function handleSort(key: SortKey) {
+    if (sortKey === key) setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'));
+    else { setSortKey(key); setSortDir('desc'); }
+  }
+
+  const filtered = transactions.filter((tx) => {
+    if (filter === 'income')   return tx.kind === 'income';
+    if (filter === 'expense')  return tx.kind === 'expense';
+    if (filter === 'internal') return tx.kind === 'internal_transfer';
+    if (filter === 'review')   return tx.needsReview;
+    return true;
+  });
+
+  const sorted = [...filtered].sort((a, b) => {
+    let cmp = 0;
+    if (sortKey === 'date')     cmp = a.date.localeCompare(b.date);
+    if (sortKey === 'amount')   cmp = Math.abs(a.amount) - Math.abs(b.amount);
+    if (sortKey === 'account')  cmp = a.account.localeCompare(b.account);
+    if (sortKey === 'category') cmp = a.category.localeCompare(b.category);
+    return sortDir === 'desc' ? -cmp : cmp;
+  });
+
+  const counts = {
+    income:   transactions.filter((t) => t.kind === 'income').length,
+    expense:  transactions.filter((t) => t.kind === 'expense').length,
+    internal: transactions.filter((t) => t.kind === 'internal_transfer').length,
+    review:   transactions.filter((t) => t.needsReview).length,
+  };
+
+  // ── empty / loading ──────────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="h-7 w-7 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
       </div>
-      <PlaceholderCard
-        title="Coming in Sessions 2 & 5"
-        body="Session 2 lands a basic transactions table once the BBVA + Wise parsers are in. Session 5 adds search, filter, sort, the click-to-edit panel, and the rules engine."
-      />
+    );
+  }
+
+  if (transactions.length === 0) {
+    return (
+      <div className="space-y-6 max-w-lg">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight">Transactions</h2>
+          <p className="text-sm text-slate-600 mt-1">Every transaction across all accounts.</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center space-y-4">
+          <Upload className="h-10 w-10 text-slate-200 mx-auto" />
+          <div>
+            <p className="font-medium text-slate-700">No transactions yet</p>
+            <p className="text-sm text-slate-500 mt-1">Import a statement to get started.</p>
+          </div>
+          <button
+            onClick={() => navigate('/import')}
+            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Go to Import
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── main view ────────────────────────────────────────────────────────────
+  return (
+    <div className="space-y-5">
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight">Transactions</h2>
+          <p className="text-sm text-slate-600 mt-1">{transactions.length} transactions across all accounts</p>
+        </div>
+        <button
+          onClick={() => navigate('/import')}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
+        >
+          <Upload className="h-3.5 w-3.5" /> Import more
+        </button>
+      </div>
+
+      {/* Filter tabs */}
+      <div className="flex gap-2 flex-wrap text-sm">
+        {(
+          [
+            { key: 'all',      label: `All (${transactions.length})`,    amber: false },
+            { key: 'income',   label: `Income (${counts.income})`,       amber: false },
+            { key: 'expense',  label: `Expenses (${counts.expense})`,    amber: false },
+            { key: 'internal', label: `Internal (${counts.internal})`,   amber: false },
+            { key: 'review',   label: `Needs Review (${counts.review})`, amber: true  },
+          ] as const
+        ).map(({ key, label, amber }) => (
+          <button
+            key={key}
+            onClick={() => setFilter(key)}
+            className={`px-3 py-1.5 rounded-full border transition-colors
+              ${filter === key
+                ? amber
+                  ? 'bg-amber-50 border-amber-300 text-amber-700 font-medium'
+                  : 'bg-slate-800 border-slate-800 text-white font-medium'
+                : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+              }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Table */}
+      <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 border-b border-slate-200">
+              <tr>
+                <th className="px-4 py-3 text-left">
+                  <SortButton label="Date"     sortKey="date"     current={sortKey} dir={sortDir} onClick={handleSort} />
+                </th>
+                <th className="px-4 py-3 text-left font-medium text-slate-500">Description</th>
+                <th className="px-4 py-3 text-right">
+                  <SortButton label="Amount"   sortKey="amount"   current={sortKey} dir={sortDir} onClick={handleSort} />
+                </th>
+                <th className="px-4 py-3 text-left">
+                  <SortButton label="Account"  sortKey="account"  current={sortKey} dir={sortDir} onClick={handleSort} />
+                </th>
+                <th className="px-4 py-3 text-left">
+                  <SortButton label="Category" sortKey="category" current={sortKey} dir={sortDir} onClick={handleSort} />
+                </th>
+                <th className="px-4 py-3 text-left font-medium text-slate-500 whitespace-nowrap">Type</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {sorted.map((tx) => (
+                <tr
+                  key={tx.id}
+                  className={`group hover:bg-slate-50/70 transition-colors
+                    ${tx.kind === 'internal_transfer' ? 'opacity-50' : ''}`}
+                >
+                  <td className="px-4 py-3 font-mono text-xs text-slate-500 whitespace-nowrap">
+                    {fmtDate(tx.date)}
+                  </td>
+                  <td className="px-4 py-3 text-slate-800 max-w-xs">
+                    <span className="line-clamp-1">{tx.description}</span>
+                    {tx.needsReview && (
+                      <span className="ml-1.5 text-xs text-amber-500">⚑</span>
+                    )}
+                  </td>
+                  <td className={`px-4 py-3 text-right font-mono text-xs tabular-nums whitespace-pre-line
+                    ${tx.kind === 'income'            ? 'text-green-600 font-medium'
+                    : tx.kind === 'internal_transfer' ? 'text-slate-400'
+                    :                                   'text-red-500'}`}>
+                    {fmtAmount(tx)}
+                  </td>
+                  <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
+                    {accountDot(tx.account)}
+                  </td>
+                  <td className="px-4 py-3 text-slate-600 text-xs">{tx.category}</td>
+                  <td className="px-4 py-3">
+                    {tx.kind === 'internal_transfer' ? (
+                      <span className="px-1.5 py-0.5 text-xs rounded bg-slate-100 text-slate-400">Internal</span>
+                    ) : tx.kind === 'income' ? (
+                      <span className="px-1.5 py-0.5 text-xs rounded bg-green-100 text-green-700">Income</span>
+                    ) : (
+                      <span className="px-1.5 py-0.5 text-xs rounded bg-red-50 text-red-500">Expense</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {sorted.length === 0 && (
+            <p className="text-sm text-slate-400 text-center py-10">No transactions match this filter.</p>
+          )}
+        </div>
+        <div className="px-4 py-2.5 border-t border-slate-100 bg-slate-50/50 text-xs text-slate-400">
+          Showing {sorted.length} of {transactions.length} transactions
+        </div>
+      </div>
     </div>
   );
 }
