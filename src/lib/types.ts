@@ -34,3 +34,23 @@ export interface ImportSummary {
   internalCount: number;
   reviewCount: number;
 }
+
+export interface Rule {
+  id: string;
+  description: string;
+  matchField: 'description' | 'rawDescription';
+  matchType: 'contains' | 'exact';
+  matchValue: string;
+  category: string;
+  notes: string;
+  createdAt: string;
+  enabled: boolean;
+}
+
+export interface CustomCategory {
+  id: string;
+  name: string;
+  isBusiness: boolean;
+  isFixed: boolean;
+  colour: 'blue' | 'green' | 'purple' | 'amber' | 'gray';
+}
