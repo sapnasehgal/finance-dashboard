@@ -47,6 +47,16 @@ function categorise(concepto: string, movimiento: string, amount: number): Categ
     return { category: 'Internal Transfer (Wise→BBVA)', kind: 'internal_transfer', needsReview: false };
   }
 
+  // ── AMEX monthly bill debit (domiciliación) ───────────────────────────────
+  if (c.includes('american express') || (c.includes('amex') && amount < 0)) {
+    return { category: 'Internal Transfer (AMEX→BBVA)', kind: 'internal_transfer', needsReview: false };
+  }
+
+  // ── Iberia Más card monthly bill debit ───────────────────────────────────
+  if (c.includes('iberia cards') || (c.includes('iberia') && (m.includes('recibo') || m.includes('domiciliac')))) {
+    return { category: 'Internal Transfer (BBVA→Iberia)', kind: 'internal_transfer', needsReview: false };
+  }
+
   // ── Personal loan repayment (~€403.61/mo until May 2027) ─────────────────
   if (c.includes('amortizacion') || (c.includes('prestamo') && c.includes('cargo'))) {
     return { category: 'Loan Repayment', kind: 'expense', needsReview: false };
@@ -214,11 +224,12 @@ function categorise(concepto: string, movimiento: string, amount: number): Categ
 
   // ── Income (positive amounts not already caught above) ────────────────────
   if (amount > 0) {
-    // €85 recurring Bizum → storage rental
-    if (Math.abs(amount - 85) < 0.01) {
+    const isBizum = c.includes('bizum') || m.includes('bizum');
+    // €85 recurring Bizum → storage rental (tenant pays via Bizum)
+    if (isBizum && Math.abs(amount - 85) < 0.01) {
       return { category: 'Rental Income (Storage €85)', kind: 'income', needsReview: false };
     }
-    if (c.includes('bizum') || c.includes('ingreso por bizum') || m.includes('bizum')) {
+    if (isBizum) {
       return { category: 'Tutoring Income', kind: 'income', needsReview: false };
     }
     if (c === 'transferencia recibida') {

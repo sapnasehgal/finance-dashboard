@@ -79,6 +79,11 @@ function categorise(row: AMEXRow, csvAmount: number): Cat {
     return { category: 'Internal Transfer (AMEX→BBVA)', kind: 'internal_transfer', needsReview: false };
   }
 
+  // Annual card fee
+  if (desc.includes('ANNUAL FEE') || desc.includes('CUOTA ANUAL') || desc.includes('FEE ANUAL') || desc.includes('MEMBERSHIP FEE') || desc.includes('ANNUAL MEMBERSHIP')) {
+    return { category: 'Card Annual Fee', kind: 'expense', needsReview: false };
+  }
+
   // Credits / refunds (negative charge on card = money back)
   if (csvAmount < 0) {
     return { category: 'Refund', kind: 'income', needsReview: false };

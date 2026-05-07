@@ -65,9 +65,10 @@ export const CATEGORY_META: Record<string, CategoryMeta> = {
   'Cash (Uncategorised)':             { isBusiness: false, isFixed: false, colour: 'amber' },
 
   // ── Internal / transfers ───────────────────────────────────────────────────
-  'Internal Transfer':                { isBusiness: false, isFixed: false, colour: 'gray', kind: 'internal_transfer' },
-  'Internal Transfer (Wise→BBVA)':    { isBusiness: false, isFixed: false, colour: 'gray', kind: 'internal_transfer' },
-  'Internal Transfer (AMEX→BBVA)':   { isBusiness: false, isFixed: false, colour: 'gray', kind: 'internal_transfer' },
+  'Internal Transfer':                  { isBusiness: false, isFixed: false, colour: 'gray', kind: 'internal_transfer' },
+  'Internal Transfer (Wise→BBVA)':      { isBusiness: false, isFixed: false, colour: 'gray', kind: 'internal_transfer' },
+  'Internal Transfer (AMEX→BBVA)':      { isBusiness: false, isFixed: false, colour: 'gray', kind: 'internal_transfer' },
+  'Internal Transfer (BBVA→Iberia)':    { isBusiness: false, isFixed: false, colour: 'gray', kind: 'internal_transfer' },
 
   // ── Loan ──────────────────────────────────────────────────────────────────
   'Loan Repayment':                   { isBusiness: false, isFixed: true,  colour: 'gray' },
@@ -106,4 +107,5 @@ export const INTERNAL_CATEGORIES = new Set<string>([
   'Internal Transfer',
   'Internal Transfer (Wise→BBVA)',
   'Internal Transfer (AMEX→BBVA)',
+  'Internal Transfer (BBVA→Iberia)',
 ]);

@@ -67,6 +67,51 @@ function categorise(concepto: string, amount: number): Cat {
     return { category: 'Health & Pharmacy', kind: 'expense', needsReview: false };
   }
 
+  // Flights — flag for review (may be personal or business)
+  if (
+    c.includes('iberia') || c.includes('vueling') || c.includes('ryanair') ||
+    c.includes('easyjet') || c.includes('level') || c.includes('aena') ||
+    c.includes('brussels airlines') || c.includes('air europa') || c.includes('volotea')
+  ) {
+    return { category: 'Travel & Holidays', kind: 'expense', needsReview: true };
+  }
+
+  // Hotels & accommodation
+  if (
+    c.includes('hotel') || c.includes('airbnb') || c.includes('booking.com') ||
+    c.includes('marriott') || c.includes('hilton') || c.includes('melia') ||
+    c.includes('nh ') || c.includes('ibis') || c.includes('barcelo') ||
+    c.includes('riu ') || c.includes('husa') || c.includes('ac hotel')
+  ) {
+    return { category: 'Travel & Holidays', kind: 'expense', needsReview: true };
+  }
+
+  // Car rental
+  if (
+    c.includes('avis') || c.includes('hertz') || c.includes('europcar') ||
+    c.includes('sixt') || c.includes('goldcar') || c.includes('record go')
+  ) {
+    return { category: 'Travel & Holidays', kind: 'expense', needsReview: true };
+  }
+
+  // Long-distance rail
+  if (c.includes('renfe') || c.includes('ave ') || c.includes('alvia') || c.includes('iryo')) {
+    return { category: 'Transport', kind: 'expense', needsReview: false };
+  }
+
+  // Restaurants & food (Iberia Más earns points on dining)
+  if (c.includes('restauran') || c.includes('cafeteria') || c.includes('bar ') || c.includes('cafe ')) {
+    return { category: 'Dining Out', kind: 'expense', needsReview: false };
+  }
+
+  // Grocery supermarkets
+  if (
+    c.includes('mercadona') || c.includes('carrefour') || c.includes('ametller') ||
+    c.includes('condis') || c.includes('caprabo') || c.includes('lidl') || c.includes('alcampo')
+  ) {
+    return { category: 'Groceries', kind: 'expense', needsReview: false };
+  }
+
   return { category: 'Uncategorised', kind: 'expense', needsReview: true };
 }
 
