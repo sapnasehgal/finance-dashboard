@@ -35,12 +35,16 @@ export interface ImportSummary {
   reviewCount: number;
 }
 
-export interface Rule {
-  id: string;
-  description: string;
+export interface RuleCondition {
   matchField: 'description' | 'rawDescription';
   matchType: 'contains' | 'exact';
   matchValue: string;
+}
+
+export interface Rule {
+  id: string;
+  description: string;
+  conditions: RuleCondition[];
   category: string;
   notes: string;
   createdAt: string;

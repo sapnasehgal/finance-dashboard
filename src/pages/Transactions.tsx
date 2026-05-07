@@ -7,6 +7,7 @@ import {
   saveRule,
   applyRuleRetroactive,
   getCustomCategories,
+  saveCustomCategory,
 } from '../lib/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
@@ -145,6 +146,12 @@ export default function Transactions() {
       }
     }
     setRuleSourceTx(null);
+  }
+
+  async function handleCreateCategory(cat: CustomCategory) {
+    if (!db || !user) return;
+    await saveCustomCategory(db, user.uid, cat);
+    setCustomCategories((prev) => [...prev, cat]);
   }
 
   // ── Filter + sort ─────────────────────────────────────────────────────────
@@ -423,6 +430,7 @@ export default function Transactions() {
           setRuleSourceTx(tx);
           setSelectedTx(null);
         }}
+        onCreateCategory={handleCreateCategory}
       />
 
       {/* Rule creation modal */}

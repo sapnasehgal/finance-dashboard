@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Wand2, CheckCircle } from 'lucide-react';
+import { X, Wand2, CheckCircle, Plus } from 'lucide-react';
 import { CATEGORY_META } from '../lib/categorise';
 import type { Transaction, CustomCategory } from '../lib/types';
 
@@ -16,6 +16,7 @@ interface Props {
   onClose: () => void;
   onSave: (txId: string, payload: EditPayload) => Promise<void>;
   onCreateRule: (tx: Transaction) => void;
+  onCreateCategory: (cat: CustomCategory) => Promise<void>;
 }
 
 function fmtDate(iso: string) {
@@ -23,27 +24,28 @@ function fmtDate(iso: string) {
   return `${d}/${m}/${y}`;
 }
 
-// Inner form — keyed by tx.id so all state resets when a different row is clicked.
 function EditForm({
   tx,
   customCategories,
   onClose,
   onSave,
   onCreateRule,
+  onCreateCategory,
 }: {
   tx: Transaction;
   customCategories: CustomCategory[];
   onClose: () => void;
   onSave: (txId: string, payload: EditPayload) => Promise<void>;
   onCreateRule: (tx: Transaction) => void;
+  onCreateCategory: (cat: CustomCategory) => Promise<void>;
 }) {
   const [category, setCategory] = useState(tx.category);
   const [notes, setNotes] = useState(tx.notes);
-  const [needsReview, setNeedsReview] = useState(tx.needsReview);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [catQuery, setCatQuery] = useState('');
   const [catOpen, setCatOpen] = useState(false);
+  const [creatingCat, setCreatingCat] = useState(false);
 
   const builtInCats = Object.keys(CATEGORY_META);
   const customCatNames = customCategories.map((c) => c.name);
@@ -51,10 +53,32 @@ function EditForm({
   const filteredCats = catQuery
     ? allCats.filter((c) => c.toLowerCase().includes(catQuery.toLowerCase()))
     : allCats;
+  const exactMatch = allCats.some((c) => c.toLowerCase() === catQuery.toLowerCase().trim());
+  const showCreate = catQuery.trim().length > 0 && !exactMatch;
 
-  const isDirty =
-    category !== tx.category || notes !== tx.notes || needsReview !== tx.needsReview;
+  const isDirty = category !== tx.category || notes !== tx.notes;
   const isOverride = category !== tx.autoCategory;
+
+  async function handleCreateCategory() {
+    const name = catQuery.trim();
+    if (!name || creatingCat) return;
+    setCreatingCat(true);
+    const cat: CustomCategory = {
+      id: `cat_${Date.now()}`,
+      name,
+      isBusiness: false,
+      isFixed: false,
+      colour: 'amber',
+    };
+    try {
+      await onCreateCategory(cat);
+      setCategory(name);
+      setCatOpen(false);
+      setCatQuery('');
+    } finally {
+      setCreatingCat(false);
+    }
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -63,7 +87,7 @@ function EditForm({
         category,
         notes,
         isManualOverride: isOverride,
-        needsReview,
+        needsReview: false,
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -120,7 +144,7 @@ function EditForm({
             <input
               className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400"
               value={catOpen ? catQuery : category}
-              placeholder="Search categories…"
+              placeholder="Search or create a category…"
               onFocus={() => {
                 setCatOpen(true);
                 setCatQuery('');
@@ -130,26 +154,35 @@ function EditForm({
             />
             {catOpen && (
               <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-20 max-h-52 overflow-y-auto">
-                {filteredCats.length === 0 ? (
+                {filteredCats.map((cat) => (
+                  <button
+                    key={cat}
+                    onMouseDown={() => {
+                      setCategory(cat);
+                      setCatOpen(false);
+                      setCatQuery('');
+                    }}
+                    className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-50 transition-colors ${
+                      cat === category
+                        ? 'font-medium text-blue-600 bg-blue-50/50'
+                        : 'text-slate-700'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+                {showCreate && (
+                  <button
+                    onMouseDown={handleCreateCategory}
+                    disabled={creatingCat}
+                    className="w-full text-left px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 transition-colors flex items-center gap-1.5 border-t border-slate-100"
+                  >
+                    <Plus className="h-3.5 w-3.5 flex-shrink-0" />
+                    {creatingCat ? 'Creating…' : `Create "${catQuery.trim()}"`}
+                  </button>
+                )}
+                {filteredCats.length === 0 && !showCreate && (
                   <p className="px-3 py-2 text-xs text-slate-400">No categories found.</p>
-                ) : (
-                  filteredCats.map((cat) => (
-                    <button
-                      key={cat}
-                      onMouseDown={() => {
-                        setCategory(cat);
-                        setCatOpen(false);
-                        setCatQuery('');
-                      }}
-                      className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-50 transition-colors ${
-                        cat === category
-                          ? 'font-medium text-blue-600 bg-blue-50/50'
-                          : 'text-slate-700'
-                      }`}
-                    >
-                      {cat}
-                    </button>
-                  ))
                 )}
               </div>
             )}
@@ -172,17 +205,6 @@ function EditForm({
             placeholder="Optional note…"
           />
         </div>
-
-        {/* Needs review toggle */}
-        <label className="flex items-center gap-2.5 cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={needsReview}
-            onChange={(e) => setNeedsReview(e.target.checked)}
-            className="h-4 w-4 rounded border-slate-300 accent-amber-500"
-          />
-          <span className="text-sm text-slate-700">Flag for review</span>
-        </label>
 
         {/* Raw description (reference) */}
         {tx.rawDescription !== tx.description && (
@@ -234,6 +256,7 @@ export default function TransactionEditPanel({
   onClose,
   onSave,
   onCreateRule,
+  onCreateCategory,
 }: Props) {
   return (
     <div className={`fixed inset-0 z-40 ${tx ? '' : 'pointer-events-none'}`}>
@@ -258,6 +281,7 @@ export default function TransactionEditPanel({
             onClose={onClose}
             onSave={onSave}
             onCreateRule={onCreateRule}
+            onCreateCategory={onCreateCategory}
           />
         )}
       </div>

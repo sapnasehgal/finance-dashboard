@@ -101,10 +101,27 @@ export async function saveRule(db: Firestore, uid: string, rule: Rule): Promise<
   await setDoc(doc(ruleCollection(db, uid), rule.id), rule);
 }
 
+// Normalise rules written before the multi-condition data model.
+function normalizeRule(data: Record<string, unknown>): Rule {
+  if (Array.isArray(data.conditions) && data.conditions.length > 0) {
+    return data as unknown as Rule;
+  }
+  return {
+    ...(data as unknown as Rule),
+    conditions: [
+      {
+        matchField: data.matchField as Rule['conditions'][0]['matchField'],
+        matchType: data.matchType as Rule['conditions'][0]['matchType'],
+        matchValue: data.matchValue as string,
+      },
+    ],
+  };
+}
+
 export async function getRules(db: Firestore, uid: string): Promise<Rule[]> {
   const q = query(ruleCollection(db, uid), orderBy('createdAt', 'desc'));
   const snap = await getDocs(q);
-  return snap.docs.map((d) => d.data() as Rule);
+  return snap.docs.map((d) => normalizeRule(d.data()));
 }
 
 export async function updateRule(
@@ -143,6 +160,7 @@ export async function applyRuleRetroactive(
       batch.update(doc(txCollection(db, uid), tx.id), {
         category: updated.category,
         isManualOverride: true,
+        needsReview: false,
         notes: updated.notes,
       });
     }

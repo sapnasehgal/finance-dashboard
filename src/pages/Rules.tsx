@@ -6,12 +6,15 @@ import {
   getRules,
   deleteRule,
   updateRule,
+  saveRule,
+  applyRuleRetroactive,
   getCustomCategories,
   saveCustomCategory,
   deleteCustomCategory,
 } from '../lib/firestore';
 import { CATEGORY_META, COLOUR_HEX } from '../lib/categorise';
 import type { Rule, CustomCategory } from '../lib/types';
+import CreateRuleModal from '../components/CreateRuleModal';
 
 // ── Category groups for the left panel ───────────────────────────────────────
 
@@ -244,19 +247,30 @@ function CategoriesPanel({
 
 // ── Rules panel ───────────────────────────────────────────────────────────────
 
+function describeCondition(cond: Rule['conditions'][0]): string {
+  const field = cond.matchField === 'rawDescription' ? 'raw description' : 'description';
+  const type = cond.matchType === 'exact' ? 'is exactly' : 'contains';
+  return `${field} ${type} "${cond.matchValue}"`;
+}
+
 function RulesPanel({
   rules,
   onToggle,
   onDelete,
+  onAddRule,
+  onEditRule,
 }: {
   rules: Rule[];
   onToggle: (rule: Rule) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  onAddRule: () => void;
+  onEditRule: (rule: Rule) => void;
 }) {
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  async function handleToggle(rule: Rule) {
+  async function handleToggle(e: React.MouseEvent, rule: Rule) {
+    e.stopPropagation();
     setTogglingId(rule.id);
     try {
       await onToggle(rule);
@@ -265,7 +279,8 @@ function RulesPanel({
     }
   }
 
-  async function handleDelete(id: string) {
+  async function handleDelete(e: React.MouseEvent, id: string) {
+    e.stopPropagation();
     setDeletingId(id);
     try {
       await onDelete(id);
@@ -277,37 +292,48 @@ function RulesPanel({
   if (rules.length === 0) {
     return (
       <div>
-        <h3 className="font-semibold text-slate-900 mb-4">Rules</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-slate-900">Rules</h3>
+          <button
+            onClick={onAddRule}
+            className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700"
+          >
+            <Plus className="h-3.5 w-3.5" /> Add rule
+          </button>
+        </div>
         <div className="rounded-2xl border border-dashed border-slate-200 p-10 text-center space-y-2">
           <Wand2 className="h-8 w-8 text-slate-200 mx-auto" />
           <p className="text-sm font-medium text-slate-600">No rules yet</p>
           <p className="text-xs text-slate-400">
-            Go to Transactions, click any row, and choose "Create rule from this."
+            Add a rule here, or click any transaction and choose "Create rule from this."
           </p>
         </div>
       </div>
     );
   }
 
-  function describeRule(rule: Rule): string {
-    const field = rule.matchField === 'rawDescription' ? 'raw description' : 'description';
-    const type = rule.matchType === 'exact' ? 'is exactly' : 'contains';
-    return `When ${field} ${type} "${rule.matchValue}"`;
-  }
-
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold text-slate-900">Rules</h3>
-        <span className="text-xs text-slate-400">
-          {rules.filter((r) => r.enabled).length} of {rules.length} active
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-slate-400">
+            {rules.filter((r) => r.enabled).length} of {rules.length} active
+          </span>
+          <button
+            onClick={onAddRule}
+            className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700"
+          >
+            <Plus className="h-3.5 w-3.5" /> Add rule
+          </button>
+        </div>
       </div>
       <div className="space-y-2">
         {rules.map((rule) => (
           <div
             key={rule.id}
-            className={`rounded-xl border p-4 transition-colors ${
+            onClick={() => onEditRule(rule)}
+            className={`rounded-xl border p-4 cursor-pointer transition-colors hover:border-blue-200 hover:bg-blue-50/30 ${
               rule.enabled ? 'border-slate-200 bg-white' : 'border-slate-100 bg-slate-50/50'
             }`}
           >
@@ -320,8 +346,17 @@ function RulesPanel({
                 >
                   {rule.description}
                 </p>
-                <p className="text-xs text-slate-400 mt-0.5">{describeRule(rule)}</p>
-                <p className="text-xs mt-1">
+                <div className="mt-1 space-y-0.5">
+                  {rule.conditions.map((cond, i) => (
+                    <p key={i} className="text-xs text-slate-400">
+                      {rule.conditions.length > 1 && (
+                        <span className="text-slate-300 mr-1">{i === 0 ? 'when' : 'or'}</span>
+                      )}
+                      {describeCondition(cond)}
+                    </p>
+                  ))}
+                </div>
+                <p className="text-xs mt-1.5">
                   <span className="text-slate-400">→ </span>
                   <span className={rule.enabled ? 'text-blue-600 font-medium' : 'text-slate-400'}>
                     {rule.category}
@@ -333,7 +368,7 @@ function RulesPanel({
               </div>
               <div className="flex items-center gap-1 flex-shrink-0">
                 <button
-                  onClick={() => handleToggle(rule)}
+                  onClick={(e) => handleToggle(e, rule)}
                   disabled={togglingId === rule.id}
                   className="p-1 hover:bg-slate-100 rounded-lg transition-colors"
                   title={rule.enabled ? 'Disable rule' : 'Enable rule'}
@@ -345,7 +380,7 @@ function RulesPanel({
                   )}
                 </button>
                 <button
-                  onClick={() => handleDelete(rule.id)}
+                  onClick={(e) => handleDelete(e, rule.id)}
                   disabled={deletingId === rule.id}
                   className="p-1 hover:bg-red-50 hover:text-red-500 text-slate-300 rounded-lg transition-colors"
                   title="Delete rule"
@@ -368,6 +403,9 @@ export default function Rules() {
   const [rules, setRules] = useState<Rule[]>([]);
   const [customCats, setCustomCats] = useState<CustomCategory[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showAddRule, setShowAddRule] = useState(false);
+  const [editingRule, setEditingRule] = useState<Rule | null>(null);
+  const [retroactiveMsg, setRetroactiveMsg] = useState('');
 
   useEffect(() => {
     if (!db || !user) {
@@ -407,6 +445,24 @@ export default function Rules() {
     setCustomCats((prev) => prev.filter((c) => c.id !== id));
   }
 
+  async function handleSaveRule(rule: Rule, retroactive: boolean) {
+    if (!db || !user) return;
+    const isEdit = rules.some((r) => r.id === rule.id);
+    await saveRule(db, user.uid, rule);
+    setRules((prev) =>
+      isEdit ? prev.map((r) => (r.id === rule.id ? rule : r)) : [rule, ...prev]
+    );
+    if (retroactive) {
+      const count = await applyRuleRetroactive(db, user.uid, rule);
+      if (count > 0) {
+        setRetroactiveMsg(`Applied to ${count} past transaction${count !== 1 ? 's' : ''}.`);
+        setTimeout(() => setRetroactiveMsg(''), 4000);
+      }
+    }
+    setShowAddRule(false);
+    setEditingRule(null);
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -424,6 +480,12 @@ export default function Rules() {
         </p>
       </div>
 
+      {retroactiveMsg && (
+        <div className="px-4 py-2.5 rounded-lg bg-green-50 border border-green-200 text-sm text-green-700">
+          {retroactiveMsg}
+        </div>
+      )}
+
       <div className="flex gap-6 flex-col lg:flex-row">
         {/* Left panel — categories */}
         <div className="lg:w-72 xl:w-80 flex-shrink-0 rounded-2xl border border-slate-200 bg-white p-5 flex flex-col">
@@ -440,9 +502,28 @@ export default function Rules() {
             rules={rules}
             onToggle={handleToggle}
             onDelete={handleDeleteRule}
+            onAddRule={() => setShowAddRule(true)}
+            onEditRule={(rule) => setEditingRule(rule)}
           />
         </div>
       </div>
+
+      {showAddRule && (
+        <CreateRuleModal
+          customCategories={customCats}
+          onConfirm={handleSaveRule}
+          onClose={() => setShowAddRule(false)}
+        />
+      )}
+
+      {editingRule && (
+        <CreateRuleModal
+          existingRule={editingRule}
+          customCategories={customCats}
+          onConfirm={handleSaveRule}
+          onClose={() => setEditingRule(null)}
+        />
+      )}
     </div>
   );
 }
